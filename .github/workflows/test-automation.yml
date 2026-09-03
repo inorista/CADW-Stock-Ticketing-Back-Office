@@ -67,6 +67,7 @@ jobs:
     outputs:
       test_outcome: ${{ steps.tests.outcome }}
       run_kind: ${{ steps.parameters.outputs.run_kind }}
+      pages_ready: ${{ steps.pages-artifact.outcome == 'success' }}
     env:
       AUTH_USERNAME: ${{ secrets.AUTH_USERNAME }}
       AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
@@ -262,19 +263,45 @@ jobs:
           retention-days: 14
 
       - name: Configure GitHub Pages
+        id: pages-config
         if: always() && github.event_name != 'pull_request' && vars.PUBLISH_GITHUB_PAGES == 'true'
+        continue-on-error: true
         uses: actions/configure-pages@v6
 
       - name: Upload report website
-        if: always() && github.event_name != 'pull_request' && vars.PUBLISH_GITHUB_PAGES == 'true'
+        id: pages-artifact
+        if: always() && steps.pages-config.outcome == 'success'
+        continue-on-error: true
         uses: actions/upload-pages-artifact@v5
         with:
           path: public
 
+      - name: Summarize and enforce test result
+        if: always()
+        shell: pwsh
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          PAGES_REQUESTED: ${{ vars.PUBLISH_GITHUB_PAGES }}
+          PAGES_CONFIG_OUTCOME: ${{ steps.pages-config.outcome }}
+        run: |
+          "## Final status" >> $env:GITHUB_STEP_SUMMARY
+          "- Maven/Cucumber: **$env:TEST_OUTCOME**" >> $env:GITHUB_STEP_SUMMARY
+          if ($env:PAGES_REQUESTED -eq 'true') {
+            "- GitHub Pages configuration: **$env:PAGES_CONFIG_OUTCOME**" >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            "- GitHub Pages: **disabled**; reports remain available as an Actions artifact" >> $env:GITHUB_STEP_SUMMARY
+          }
+
+          if ($env:TEST_OUTCOME -eq 'failure') {
+            Write-Host '::error title=Cucumber tests failed::Open the Run selected tests step or download the automation-reports artifact for the actual scenario failure.'
+            exit 1
+          }
+
   deploy-reports:
-    if: github.event_name != 'pull_request' && vars.PUBLISH_GITHUB_PAGES == 'true'
+    if: always() && needs.build-and-test.outputs.pages_ready == 'true'
     needs: build-and-test
     runs-on: ubuntu-latest
+    continue-on-error: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -296,14 +323,3 @@ jobs:
           echo "- [Cucumber runner report](${PAGE_URL}testng/)" >> "$GITHUB_STEP_SUMMARY"
           echo "- [Cucumber report](${PAGE_URL}cucumber/)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Test step outcome: **${TEST_OUTCOME}**" >> "$GITHUB_STEP_SUMMARY"
-
-
-  enforce-test-result:
-    if: always()
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Preserve build and test status
-        if: needs.build-and-test.result != 'success' || needs.build-and-test.outputs.test_outcome == 'failure'
-        shell: bash
-        run: exit 1

@@ -135,7 +135,7 @@ It also runs these schedules in `Asia/Ho_Chi_Minh`:
 
 Scheduled runs use Chrome headless against `staging`. To select another scheduled environment without editing the workflow, create the repository variable `SCHEDULED_TEST_ENVIRONMENT` with `dev`, `staging`, or `prod` under **Settings → Secrets and variables → Actions → Variables**.
 
-Every workflow run uploads the report bundle as an Actions artifact, independently of GitHub Pages. To additionally publish the report portal, first select **Settings → Pages → Source → GitHub Actions**, then create the repository variable `PUBLISH_GITHUB_PAGES=true` under **Settings → Secrets and variables → Actions → Variables**. Pages deployment stays disabled when this variable is absent or false, so a repository without Pages enabled cannot make the test workflow fail.
+Every workflow run uploads the report bundle as an Actions artifact, independently of GitHub Pages. To additionally publish the report portal, first select **Settings → Pages → Source → GitHub Actions**, then create the repository variable `PUBLISH_GITHUB_PAGES=true` under **Settings → Secrets and variables → Actions → Variables**. Pages deployment stays disabled when this variable is absent or false. A missing or misconfigured Pages site is reported separately and cannot make the test workflow fail; only the Maven/Cucumber result controls the test job status.
 
 Every run, including pull requests and failed runs, uploads `automation-reports-<run type>-<run number>` under **Actions → workflow run → Artifacts**. Nightly and morning artifacts therefore remain separate even though GitHub Pages shows the latest deployed run. Download and unzip an artifact, then serve the extracted directory when needed:
 
