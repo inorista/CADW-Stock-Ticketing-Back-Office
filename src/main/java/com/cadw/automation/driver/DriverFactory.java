@@ -89,6 +89,17 @@ public final class DriverFactory {
         return BrowserStateManager.clear(EnvironmentConfig.active(), browser);
     }
 
+    /** Clears cookies and Web Storage in the active browser without deleting persisted state. */
+    public static void resetCurrentBrowserSession() {
+        WebDriver driver = DriverSession.driver();
+        driver.get(EnvironmentConfig.active().baseUrl());
+        driver.manage().deleteAllCookies();
+        if (driver instanceof JavascriptExecutor executor) {
+            executor.executeScript("window.localStorage.clear(); window.sessionStorage.clear();");
+        }
+        driver.get(EnvironmentConfig.active().baseUrl());
+    }
+
     public static void markRemoteStatus(boolean passed, String reason) {
         WebDriver driver = DriverSession.driverOrNull();
         if (driver instanceof JavascriptExecutor executor

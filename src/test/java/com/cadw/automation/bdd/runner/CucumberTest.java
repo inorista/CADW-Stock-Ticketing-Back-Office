@@ -5,8 +5,13 @@ import io.cucumber.testng.CucumberOptions;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
-@CucumberOptions(features = "classpath:features", glue = "com.cadw.automation.bdd", plugin = { "pretty", "summary",
-    "io.qameta.allure.cucumber7jvm.AllureCucumber7Jvm" }, monochrome = true)
+@CucumberOptions(features = "classpath:features", glue = "com.cadw.automation.bdd", plugin = {
+    "pretty",
+    "summary",
+    "html:target/cucumber-report/cucumber.html",
+    "json:target/cucumber-report/cucumber.json",
+    "io.qameta.allure.cucumber7jvm.AllureCucumber7Jvm"
+}, monochrome = true)
 @Test
 public class CucumberTest extends AbstractTestNGCucumberTests {
 

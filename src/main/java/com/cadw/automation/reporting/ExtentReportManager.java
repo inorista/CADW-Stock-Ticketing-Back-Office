@@ -18,7 +18,7 @@ public final class ExtentReportManager {
     private static ExtentReports createReport() {
         ExtentSparkReporter spark = new ExtentSparkReporter(REPORT_PATH.toString());
         spark.config().setDocumentTitle("Selenium Automation Results");
-        spark.config().setReportName("Google Test Suite");
+        spark.config().setReportName("CADW Automation Suite");
 
         ExtentReports report = new ExtentReports();
         report.attachReporter(spark);

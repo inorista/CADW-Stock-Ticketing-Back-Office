@@ -28,8 +28,8 @@ public class LoginSteps {
     @Then("User enters the configured valid credentials")
     public void enterConfiguredCredentials() {
         EnvironmentConfig config = EnvironmentConfig.active();
-        loginPage.enterEmail(config.getString("username"));
-        loginPage.enterPassword(config.getString("password"));
+        loginPage.enterEmail(config.getString("auth.username"));
+        loginPage.enterPassword(config.getString("auth.password"));
     }
 
     @Then("User enters invalid {string} and {string}")

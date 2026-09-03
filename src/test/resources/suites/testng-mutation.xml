@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="CADW native TestNG mutation suite" parallel="none" preserve-order="true">
+    <listeners>
+        <listener class-name="com.cadw.automation.reporting.TestReportListener"/>
+    </listeners>
+    <test name="Native TestNG mutation tests">
+        <classes>
+            <class name="com.cadw.automation.tests.StockMutationTest"/>
+        </classes>
+    </test>
+</suite>
