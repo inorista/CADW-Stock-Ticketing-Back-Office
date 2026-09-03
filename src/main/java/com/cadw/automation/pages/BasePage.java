@@ -42,7 +42,8 @@ public abstract class BasePage {
     }
 
     protected List<WebElement> waitUntilElementsAreVisible(By locator) {
-        return wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(locator));
+        return wait.until(ExpectedConditions.refreshed(
+                ExpectedConditions.visibilityOfAllElementsLocatedBy(locator)));
     }
 
     protected boolean isElementDisplayed(By locator) {
@@ -82,7 +83,8 @@ public abstract class BasePage {
     }
 
     protected List<WebElement> waitUntilAllVisible(By locator) {
-        return wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(locator));
+        return wait.until(ExpectedConditions.refreshed(
+                ExpectedConditions.visibilityOfAllElementsLocatedBy(locator)));
     }
 
     protected <T> T waitUntilCondition(Function<? super WebDriver, T> condition) {

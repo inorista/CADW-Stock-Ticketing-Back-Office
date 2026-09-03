@@ -1,4 +1,4 @@
-@regression @smoke @allure.label.epic:Stock @allure.label.feature:Stock @authenticated @serial @product_search
+@regression @smoke @allure.label.epic:Stock @allure.label.feature:Stock @authenticated @product_search
 Feature: Feature to test Product Search
 
   Background: User has logged in and opened Stock Products

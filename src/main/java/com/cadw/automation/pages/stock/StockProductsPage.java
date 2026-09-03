@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.openqa.selenium.Alert;
 import org.openqa.selenium.By;
 import org.openqa.selenium.NoAlertPresentException;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 
@@ -134,18 +135,29 @@ public class StockProductsPage extends BasePage {
   }
 
   public boolean validateProductList(String productName, String productCode) {
-    List<WebElement> productList = waitUntilAllVisible(PRODUCT_ITEM);
-    if (productList.isEmpty()) {
-      return false;
-    }
-    return productList.stream()
-        .anyMatch(
-            product -> {
-              String actualProductName = product.findElement(By.xpath(".//td[3]")).getText();
-              String actualProductCode = product.findElement(By.xpath(".//td[1]")).getText();
-              return actualProductName.toLowerCase().contains(productName.trim().toLowerCase())
-                  && actualProductCode.toLowerCase().contains(productCode.trim().toLowerCase());
-            });
+    String expectedName = productName.trim().toLowerCase(Locale.ROOT);
+    String expectedCode = productCode.trim().toLowerCase(Locale.ROOT);
+    return waitUntilCondition(
+        webDriver -> {
+          try {
+            return webDriver.findElements(PRODUCT_ITEM).stream()
+                .filter(WebElement::isDisplayed)
+                .anyMatch(
+                    product -> {
+                      String actualName =
+                          product.findElement(By.xpath(".//td[3]"))
+                              .getText()
+                              .toLowerCase(Locale.ROOT);
+                      String actualCode =
+                          product.findElement(By.xpath(".//td[1]"))
+                              .getText()
+                              .toLowerCase(Locale.ROOT);
+                      return actualName.contains(expectedName) && actualCode.contains(expectedCode);
+                    });
+          } catch (StaleElementReferenceException exception) {
+            return false;
+          }
+        });
   }
 
   public void searchProduct(String productCode, String productName) {

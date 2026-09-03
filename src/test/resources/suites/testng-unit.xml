@@ -8,6 +8,7 @@
         <classes>
             <class name="com.cadw.automation.config.EnvironmentConfigTest"/>
             <class name="com.cadw.automation.state.BrowserStateManagerTest"/>
+            <class name="com.cadw.automation.bdd.hooks.ScenarioExecutionGuardTest"/>
         </classes>
     </test>
 </suite>

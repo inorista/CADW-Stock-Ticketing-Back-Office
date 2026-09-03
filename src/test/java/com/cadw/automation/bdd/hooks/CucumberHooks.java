@@ -12,6 +12,13 @@ import org.testng.ITestResult;
 import org.testng.Reporter;
 
 public final class CucumberHooks {
+    @Before(order = Integer.MIN_VALUE)
+    public void reserveExecutionSlot(Scenario scenario) {
+        boolean requiresExclusiveExecution = scenario.getSourceTagNames().contains("@serial")
+                || scenario.getSourceTagNames().contains("@mutation");
+        ScenarioExecutionGuard.acquire(requiresExclusiveExecution);
+    }
+
     @Before(order = 0)
     public void startBrowser(Scenario scenario) {
         DriverFactory.start(testParameter("browser"), testParameter("execution"), scenario.getName());
@@ -36,6 +43,11 @@ public final class CucumberHooks {
         } finally {
             DriverFactory.stop(scenario.getSourceTagNames().contains("@authenticated"));
         }
+    }
+
+    @After(order = Integer.MIN_VALUE)
+    public void releaseExecutionSlot() {
+        ScenarioExecutionGuard.release();
     }
 
     private static String testParameter(String name) {

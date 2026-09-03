@@ -75,10 +75,10 @@ jobs:
       LT_BUILD: GitHub-${{ github.run_number }}-${{ github.sha }}
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Java 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
@@ -248,7 +248,7 @@ jobs:
 
       - name: Upload raw test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: automation-reports-${{ steps.parameters.outputs.run_slug }}-${{ github.run_number }}
           path: |
@@ -262,22 +262,17 @@ jobs:
           retention-days: 14
 
       - name: Configure GitHub Pages
-        if: always() && github.event_name != 'pull_request'
-        uses: actions/configure-pages@v5
+        if: always() && github.event_name != 'pull_request' && vars.PUBLISH_GITHUB_PAGES == 'true'
+        uses: actions/configure-pages@v6
 
       - name: Upload report website
-        if: always() && github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v4
+        if: always() && github.event_name != 'pull_request' && vars.PUBLISH_GITHUB_PAGES == 'true'
+        uses: actions/upload-pages-artifact@v5
         with:
           path: public
 
-      - name: Enforce test result on pull requests
-        if: github.event_name == 'pull_request' && steps.tests.outcome == 'failure'
-        shell: bash
-        run: exit 1
-
   deploy-reports:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && vars.PUBLISH_GITHUB_PAGES == 'true'
     needs: build-and-test
     runs-on: ubuntu-latest
     environment:
@@ -286,7 +281,7 @@ jobs:
     steps:
       - name: Deploy reports to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
       - name: Add report links to workflow summary
         env:
@@ -302,6 +297,13 @@ jobs:
           echo "- [Cucumber report](${PAGE_URL}cucumber/)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Test step outcome: **${TEST_OUTCOME}**" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Preserve failing test status
-        if: needs.build-and-test.outputs.test_outcome == 'failure'
+
+  enforce-test-result:
+    if: always()
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preserve build and test status
+        if: needs.build-and-test.result != 'success' || needs.build-and-test.outputs.test_outcome == 'failure'
+        shell: bash
         run: exit 1

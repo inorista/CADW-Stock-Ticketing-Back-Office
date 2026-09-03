@@ -19,6 +19,8 @@ Selenium Manager resolves the matching local driver automatically.
 
 TestNG remains the Cucumber JVM runner, but functional tests are selected and executed exclusively as Cucumber scenarios.
 
+Cucumber scenarios run with up to four parallel workers in the single-browser suite. Scenarios tagged `@serial` or `@mutation` acquire an exclusive execution lock, so data-changing flows never overlap with read-only scenarios. The cross-browser suite runs its three browsers in parallel and allows up to two scenario workers per browser.
+
 | Scope | Cucumber expression | Coverage |
 | --- | --- | --- |
 | Smoke | `@smoke and not @mutation` | Fast critical paths without changing application data |
@@ -133,7 +135,7 @@ It also runs these schedules in `Asia/Ho_Chi_Minh`:
 
 Scheduled runs use Chrome headless against `staging`. To select another scheduled environment without editing the workflow, create the repository variable `SCHEDULED_TEST_ENVIRONMENT` with `dev`, `staging`, or `prod` under **Settings → Secrets and variables → Actions → Variables**.
 
-For non-PR runs, the workflow deploys one report portal to GitHub Pages and writes direct Allure, Extent, TestNG, and Cucumber links into the workflow **Summary**. Configure this once under **Settings → Pages → Source → GitHub Actions**.
+Every workflow run uploads the report bundle as an Actions artifact, independently of GitHub Pages. To additionally publish the report portal, first select **Settings → Pages → Source → GitHub Actions**, then create the repository variable `PUBLISH_GITHUB_PAGES=true` under **Settings → Secrets and variables → Actions → Variables**. Pages deployment stays disabled when this variable is absent or false, so a repository without Pages enabled cannot make the test workflow fail.
 
 Every run, including pull requests and failed runs, uploads `automation-reports-<run type>-<run number>` under **Actions → workflow run → Artifacts**. Nightly and morning artifacts therefore remain separate even though GitHub Pages shows the latest deployed run. Download and unzip an artifact, then serve the extracted directory when needed:
 
