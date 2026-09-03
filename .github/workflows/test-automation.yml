@@ -12,17 +12,22 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: Test suite
+        description: Cucumber execution suite
         required: true
-        default: testng
+        default: cucumber
         type: choice
         options:
-          - testng
-          - testng-unit
-          - testng-mutation
-          - testng-cross-browser
           - cucumber
           - cucumber-cross-browser
+      test_scope:
+        description: Cucumber test scope
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - e2e
+          - regression
       environment:
         description: Application environment
         required: true
@@ -40,11 +45,6 @@ on:
         required: true
         default: true
         type: boolean
-      cucumber_tags:
-        description: Cucumber tag expression (ignored by native TestNG suites)
-        required: false
-        default: not @mutation
-        type: string
       execution:
         description: Execution target
         required: true
@@ -93,17 +93,13 @@ jobs:
           INPUT_BROWSER: ${{ inputs.browser }}
           INPUT_HEADLESS: ${{ inputs.headless }}
           INPUT_EXECUTION: ${{ inputs.execution }}
-          INPUT_CUCUMBER_TAGS: ${{ inputs.cucumber_tags }}
+          INPUT_TEST_SCOPE: ${{ inputs.test_scope }}
           SCHEDULE_CRON: ${{ github.event.schedule }}
           SCHEDULED_TEST_ENVIRONMENT: ${{ vars.SCHEDULED_TEST_ENVIRONMENT }}
         run: |
           $suite = $env:INPUT_SUITE
-          if ([string]::IsNullOrWhiteSpace($suite)) { $suite = 'testng' }
+          if ([string]::IsNullOrWhiteSpace($suite)) { $suite = 'cucumber' }
           $suiteFiles = @{
-            'testng' = 'src/test/resources/suites/testng.xml'
-            'testng-unit' = 'src/test/resources/suites/testng-unit.xml'
-            'testng-mutation' = 'src/test/resources/suites/testng-mutation.xml'
-            'testng-cross-browser' = 'src/test/resources/suites/testng-cross-browser.xml'
             'cucumber' = 'src/test/resources/suites/cucumber-testng.xml'
             'cucumber-cross-browser' = 'src/test/resources/suites/cross-browser.xml'
           }
@@ -117,11 +113,18 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($headless)) { $headless = 'true' }
           $execution = $env:INPUT_EXECUTION
           if ([string]::IsNullOrWhiteSpace($execution)) { $execution = 'local' }
-          $tags = $env:INPUT_CUCUMBER_TAGS
-          if ([string]::IsNullOrWhiteSpace($tags)) { $tags = 'not @mutation' }
+          $scope = $env:INPUT_TEST_SCOPE
+          if ([string]::IsNullOrWhiteSpace($scope)) { $scope = 'smoke' }
 
-          $runKind = 'Default or manually selected test run'
-          $runSlug = 'selected'
+          switch ($scope) {
+            'smoke' { $tags = '@smoke and not @mutation' }
+            'e2e' { $tags = '@e2e' }
+            'regression' { $tags = '@regression' }
+            default { throw "Unsupported Cucumber test scope: $scope" }
+          }
+
+          $runKind = "Cucumber $scope"
+          $runSlug = "cucumber-$scope"
           if ($env:GITHUB_EVENT_NAME -eq 'schedule') {
             $environment = $env:SCHEDULED_TEST_ENVIRONMENT
             if ([string]::IsNullOrWhiteSpace($environment)) { $environment = 'staging' }
@@ -132,13 +135,15 @@ jobs:
             switch ($env:SCHEDULE_CRON) {
               '0 0 * * *' {
                 $suite = 'cucumber'
+                $scope = 'e2e'
                 $tags = '@e2e'
                 $runKind = 'Nightly E2E'
                 $runSlug = 'nightly-e2e'
               }
               '0 8 * * *' {
-                $suite = 'testng'
-                $tags = 'not @mutation'
+                $suite = 'cucumber'
+                $scope = 'smoke'
+                $tags = '@smoke and not @mutation'
                 $runKind = 'Morning Smoke'
                 $runSlug = 'morning-smoke'
               }
@@ -151,6 +156,7 @@ jobs:
           "TEST_BROWSER=$browser" >> $env:GITHUB_ENV
           "TEST_HEADLESS=$headless" >> $env:GITHUB_ENV
           "TEST_EXECUTION=$execution" >> $env:GITHUB_ENV
+          "TEST_SCOPE=$scope" >> $env:GITHUB_ENV
           "TEST_CUCUMBER_TAGS=$tags" >> $env:GITHUB_ENV
           "TEST_RUN_KIND=$runKind" >> $env:GITHUB_ENV
           "run_kind=$runKind" >> $env:GITHUB_OUTPUT
@@ -159,11 +165,38 @@ jobs:
           "## Execution plan" >> $env:GITHUB_STEP_SUMMARY
           "- Run: **$runKind**" >> $env:GITHUB_STEP_SUMMARY
           "- Suite: ``$suite``" >> $env:GITHUB_STEP_SUMMARY
+          "- Scope: ``$scope``" >> $env:GITHUB_STEP_SUMMARY
           "- Environment: ``$environment``" >> $env:GITHUB_STEP_SUMMARY
           "- Browser: ``$browser``; headless: ``$headless``" >> $env:GITHUB_STEP_SUMMARY
-          if ($suite -like 'cucumber*') {
-            "- Cucumber tags: ``$tags``" >> $env:GITHUB_STEP_SUMMARY
+          "- Cucumber tags: ``$tags``" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Materialize environment configuration
+        shell: pwsh
+        env:
+          TEST_CONFIG_DEV: ${{ secrets.TEST_CONFIG_DEV }}
+          TEST_CONFIG_STAGING: ${{ secrets.TEST_CONFIG_STAGING }}
+          TEST_CONFIG_PROD: ${{ secrets.TEST_CONFIG_PROD }}
+        run: |
+          $configs = @{
+            'dev' = $env:TEST_CONFIG_DEV
+            'staging' = $env:TEST_CONFIG_STAGING
+            'prod' = $env:TEST_CONFIG_PROD
           }
+          $configDirectory = Join-Path $env:GITHUB_WORKSPACE 'src/main/java/com/cadw/automation/config'
+          New-Item -ItemType Directory -Force $configDirectory | Out-Null
+
+          foreach ($environmentName in $configs.Keys) {
+            $content = $configs[$environmentName]
+            if ([string]::IsNullOrWhiteSpace($content)) {
+              throw "Missing GitHub Actions secret: TEST_CONFIG_$($environmentName.ToUpper())"
+            }
+            $configPath = Join-Path $configDirectory "$environmentName.config"
+            [System.IO.File]::WriteAllText(
+              $configPath,
+              $content.Trim() + [System.Environment]::NewLine,
+              [System.Text.UTF8Encoding]::new($false))
+          }
+          Write-Host 'Environment configuration files created from GitHub Actions secrets.'
 
       - name: Run selected tests
         id: tests
@@ -201,7 +234,7 @@ jobs:
           if (Test-Path target/surefire-reports/index.html) {
             Copy-Item target/surefire-reports/* public/testng -Recurse -Force
           } else {
-            Set-Content public/testng/index.html '<h1>TestNG report was not generated</h1>'
+            Set-Content public/testng/index.html '<h1>Cucumber TestNG runner report was not generated</h1>'
           }
           if (Test-Path target/cucumber-report/cucumber.html) {
             Copy-Item target/cucumber-report/cucumber.html public/cucumber/index.html -Force
@@ -265,7 +298,7 @@ jobs:
           echo "- Run: **${RUN_KIND}**" >> "$GITHUB_STEP_SUMMARY"
           echo "- [Allure report](${PAGE_URL}allure/)" >> "$GITHUB_STEP_SUMMARY"
           echo "- [Extent report](${PAGE_URL}extent/)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- [TestNG report](${PAGE_URL}testng/)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [Cucumber runner report](${PAGE_URL}testng/)" >> "$GITHUB_STEP_SUMMARY"
           echo "- [Cucumber report](${PAGE_URL}cucumber/)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Test step outcome: **${TEST_OUTCOME}**" >> "$GITHUB_STEP_SUMMARY"
 

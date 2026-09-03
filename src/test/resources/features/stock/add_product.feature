@@ -1,10 +1,9 @@
-@allure.label.epic:Stock @allure.label.feature:Stock @authenticated @serial @mutation @smoke @add_product
+@regression @allure.label.epic:Stock @allure.label.feature:Stock @authenticated @serial @mutation @add_product
 Feature: Feature to test Add Product
 
   Background: User has logged in and opened Stock Products
     Given User is on Stock Products Page
 
-  @smoke
   Scenario Outline: User Add valid Product
     When User click Add button
     Then User navigate to Add Product Page

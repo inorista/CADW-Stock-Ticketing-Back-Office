@@ -14,18 +14,20 @@ Selenium Manager resolves the matching local driver automatically.
 
 | Suite | File | Purpose |
 | --- | --- | --- |
-| Native TestNG smoke | `src/test/resources/suites/testng.xml` | Unit checks, login, and read-only stock tests |
-| TestNG unit | `src/test/resources/suites/testng-unit.xml` | Configuration and browser-state tests without opening a browser |
-| TestNG mutation | `src/test/resources/suites/testng-mutation.xml` | Product lifecycle, order creation, Shopify sync, and stock sync |
-| TestNG cross-browser | `src/test/resources/suites/testng-cross-browser.xml` | Native read-only tests on Chrome, Firefox, and Edge |
-| Cucumber | `src/test/resources/suites/cucumber-testng.xml` | BDD feature scenarios |
-| Cucumber cross-browser | `src/test/resources/suites/cross-browser.xml` | BDD scenarios on Chrome, Firefox, and Edge |
+| Cucumber single-browser | `src/test/resources/suites/cucumber-testng.xml` | Runs selected Cucumber tags on one browser |
+| Cucumber cross-browser | `src/test/resources/suites/cross-browser.xml` | Runs selected Cucumber tags on Chrome, Firefox, and Edge |
 
-Mutation suites change application data and therefore run only when explicitly selected.
+TestNG remains the Cucumber JVM runner, but functional tests are selected and executed exclusively as Cucumber scenarios.
+
+| Scope | Cucumber expression | Coverage |
+| --- | --- | --- |
+| Smoke | `@smoke and not @mutation` | Fast critical paths without changing application data |
+| E2E | `@e2e` | Complete end-to-end Stock flows, including product lifecycle |
+| Regression | `@regression` | Every active regression scenario, including mutation and synchronization |
 
 ## Running tests
 
-The default command runs the native TestNG smoke suite:
+The default command runs the safe Cucumber smoke scope:
 
 ```bash
 mvn clean test
@@ -35,7 +37,8 @@ A complete command covering the commonly used parameters is:
 
 ```bash
 mvn clean test \
-  -DsuiteXmlFile=src/test/resources/suites/testng.xml \
+  -DsuiteXmlFile=src/test/resources/suites/cucumber-testng.xml \
+  -Dcucumber.filter.tags='@smoke and not @mutation' \
   -Dtest.environment=dev \
   -Dwebdriver.browser=chrome \
   -Dwebdriver.headless=true \
@@ -44,44 +47,22 @@ mvn clean test \
 
 Available environments are `dev`, `staging`, and `prod`. Available execution targets are `local`, `grid`, and `lambdatest`. A browser parameter inside a cross-browser XML suite takes precedence over `webdriver.browser`.
 
-Useful TestNG commands:
+Run each Cucumber scope locally:
 
 ```bash
-# Fast tests without a browser
-mvn clean test -DsuiteXmlFile=src/test/resources/suites/testng-unit.xml
+# Smoke
+mvn clean test -Dcucumber.filter.tags='@smoke and not @mutation'
 
-# Native TestNG tests on three browsers
-mvn clean test \
-  -DsuiteXmlFile=src/test/resources/suites/testng-cross-browser.xml \
-  -Dtest.environment=staging \
-  -Dwebdriver.headless=true
+# E2E (includes mutation)
+mvn clean test -Dcucumber.filter.tags='@e2e'
 
-# Explicitly run data-changing TestNG tests
-mvn clean test \
-  -DsuiteXmlFile=src/test/resources/suites/testng-mutation.xml \
-  -Dtest.environment=dev
+# Full regression (includes mutation)
+mvn clean test -Dcucumber.filter.tags='@regression'
 
-# Filter native TestNG methods by group
-mvn clean test -Dgroups=smoke -DexcludedGroups=mutation
-```
-
-Useful Cucumber commands:
-
-```bash
-# All non-mutation BDD scenarios
-mvn clean test \
-  -DsuiteXmlFile=src/test/resources/suites/cucumber-testng.xml \
-  -Dcucumber.filter.tags='not @mutation'
-
-# Only BDD smoke scenarios, excluding data changes
-mvn clean test \
-  -DsuiteXmlFile=src/test/resources/suites/cucumber-testng.xml \
-  -Dcucumber.filter.tags='@smoke and not @mutation'
-
-# BDD cross-browser
+# Cross-browser regression
 mvn clean test \
   -DsuiteXmlFile=src/test/resources/suites/cross-browser.xml \
-  -Dcucumber.filter.tags='@smoke and not @mutation'
+  -Dcucumber.filter.tags='@regression'
 ```
 
 Every key from the selected `.config` file can be overridden by a JVM property or its uppercase environment-variable form. For example, `auth.username` maps to `AUTH_USERNAME`, and `webdriver.headless` maps to `WEBDRIVER_HEADLESS`.
@@ -105,7 +86,7 @@ After a test run, the framework produces:
 | Report | Local entry point |
 | --- | --- |
 | Extent | `target/extent-report/index.html` |
-| TestNG | `target/surefire-reports/index.html` |
+| Cucumber TestNG runner | `target/surefire-reports/index.html` |
 | Cucumber | `target/cucumber-report/cucumber.html` (Cucumber suites only) |
 | Allure raw results | `target/allure-results/` |
 | Logs | `target/logs/automation.log` |
@@ -137,18 +118,18 @@ Then open `http://localhost:8080/extent-report/`, `http://localhost:8080/surefir
 
 The **Test automation** workflow supports manual selection of:
 
-- TestNG/Cucumber suite
+- Single-browser or cross-browser Cucumber suite
+- `smoke`, `e2e`, or `regression` scope
 - `dev`, `staging`, or `prod`
 - Browser and headless mode
 - Local or LambdaTest execution
-- Cucumber tag expression
 
 It also runs these schedules in `Asia/Ho_Chi_Minh`:
 
 | Local time | Scheduled run | Selection |
 | --- | --- | --- |
 | 00:00 every day | Nightly E2E | Cucumber suite with `@e2e` |
-| 08:00 every day | Morning Smoke | Native TestNG smoke suite |
+| 08:00 every day | Morning Smoke | Cucumber suite with `@smoke and not @mutation` |
 
 Scheduled runs use Chrome headless against `staging`. To select another scheduled environment without editing the workflow, create the repository variable `SCHEDULED_TEST_ENVIRONMENT` with `dev`, `staging`, or `prod` under **Settings → Secrets and variables → Actions → Variables**.
 
@@ -164,9 +145,20 @@ Open `http://localhost:8080/public/`. Pull requests intentionally do not deploy 
 
 Store these repository secrets under **Settings → Secrets and variables → Actions** when credentials should not come from the checked-in environment file:
 
+- `TEST_CONFIG_DEV` containing the complete `dev.config` content
+- `TEST_CONFIG_STAGING` containing the complete `staging.config` content
+- `TEST_CONFIG_PROD` containing the complete `prod.config` content
 - `AUTH_USERNAME`
 - `AUTH_PASSWORD`
 - `LT_USERNAME` and `LT_ACCESS_KEY` for LambdaTest
+
+The `.config` files are intentionally ignored by Git. GitHub Actions recreates all three files from these secrets before Maven runs. They can be uploaded without printing their content by using GitHub CLI:
+
+```bash
+gh secret set TEST_CONFIG_DEV < src/main/java/com/cadw/automation/config/dev.config
+gh secret set TEST_CONFIG_STAGING < src/main/java/com/cadw/automation/config/staging.config
+gh secret set TEST_CONFIG_PROD < src/main/java/com/cadw/automation/config/prod.config
+```
 
 The test step is allowed to finish before the workflow fails so reports are still assembled and uploaded. The final job status still reflects test failures.
 
@@ -175,7 +167,8 @@ The test step is allowed to finish before the workflow fails so reports are stil
 ```bash
 # Selenium Grid
 mvn clean test \
-  -DsuiteXmlFile=src/test/resources/suites/testng-cross-browser.xml \
+  -DsuiteXmlFile=src/test/resources/suites/cross-browser.xml \
+  -Dcucumber.filter.tags='@smoke and not @mutation' \
   -Dexecution=grid \
   -Dremote.url=http://localhost:4444/wd/hub \
   -Dplatform=linux
@@ -184,7 +177,8 @@ mvn clean test \
 export LT_USERNAME='your-user-name'
 export LT_ACCESS_KEY='your-access-key'
 mvn clean test \
-  -DsuiteXmlFile=src/test/resources/suites/testng-cross-browser.xml \
+  -DsuiteXmlFile=src/test/resources/suites/cross-browser.xml \
+  -Dcucumber.filter.tags='@smoke and not @mutation' \
   -Dexecution=lambdatest \
   -Dlt.platform='Windows 11' \
   -Dlt.browser.version=latest \
@@ -202,9 +196,9 @@ src/main/java/com/cadw/automation/
 └── state/        # Cookies and Web Storage persistence
 
 src/test/
-├── java/com/cadw/automation/base       # TestNG browser lifecycle
-├── java/com/cadw/automation/tests      # Native TestNG tests
-├── java/com/cadw/automation/bdd        # Cucumber runners, hooks, and steps
+├── java/com/cadw/automation/base       # Shared browser lifecycle
+├── java/com/cadw/automation/tests      # Native support tests, excluded from functional CI
+├── java/com/cadw/automation/bdd        # Cucumber TestNG runners, hooks, and steps
 └── resources/
     ├── data/                           # External test data
     ├── features/                       # Gherkin specifications

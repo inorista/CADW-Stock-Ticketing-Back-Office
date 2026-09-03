@@ -22,7 +22,8 @@
         <logback.version>1.6.3</logback.version>
         <jackson.version>2.22.2</jackson.version>
         <aspectj.version>1.9.24</aspectj.version>
-        <suiteXmlFile>src/test/resources/suites/testng.xml</suiteXmlFile>
+        <suiteXmlFile>src/test/resources/suites/cucumber-testng.xml</suiteXmlFile>
+        <cucumber.filter.tags>@smoke and not @mutation</cucumber.filter.tags>
     </properties>
 
     <dependencies>
@@ -117,6 +118,7 @@
                     </suiteXmlFiles>
                     <systemPropertyVariables>
                         <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+                        <cucumber.filter.tags>${cucumber.filter.tags}</cucumber.filter.tags>
                     </systemPropertyVariables>
                     <argLine>
                         -javaagent:"${settings.localRepository}/org/aspectj/aspectjweaver/${aspectj.version}/aspectjweaver-${aspectj.version}.jar"

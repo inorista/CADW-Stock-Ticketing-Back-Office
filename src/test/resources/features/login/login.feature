@@ -1,4 +1,4 @@
-@auth @login @allure.label.epic:Authentication @allure.label.feature:Login
+@regression @auth @login @allure.label.epic:Authentication @allure.label.feature:Login
 Feature: Feature to test Aramark login
 
   @smoke

@@ -1,10 +1,9 @@
-@allure.label.epic:Stock @allure.label.feature:Stock @authenticated @serial @smoke @product_search
+@regression @smoke @allure.label.epic:Stock @allure.label.feature:Stock @authenticated @serial @product_search
 Feature: Feature to test Product Search
 
   Background: User has logged in and opened Stock Products
     Given User is on Stock Products Page
 
-  @smoke
   Scenario Outline: Search product with valid data
     When User enter "<Product Name>" to Product name search bar
     And User enter "<Product Code>" to Product code search bar
@@ -16,7 +15,6 @@ Feature: Feature to test Product Search
       | ShopifyTest  | ShopifyTest  |
       | Dan TEst 10  |         1915 |
 
-  @smoke
   Scenario Outline: Search product with invalid data
     When User enter "<Product Name>" to Product name search bar
     And User enter "<Product Code>" to Product code search bar

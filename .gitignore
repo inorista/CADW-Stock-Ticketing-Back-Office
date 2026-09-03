@@ -9,3 +9,7 @@ target/
 .allure/
 allure-report/
 extent-report/
+
+# Environment configuration is materialized from GitHub Actions secrets in CI.
+src/main/java/com/cadw/automation/config/*.config
+src/test/resources/config/*.config

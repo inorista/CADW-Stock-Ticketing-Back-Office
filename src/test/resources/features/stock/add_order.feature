@@ -1,10 +1,9 @@
-@allure.label.epic:Stock @allure.label.feature:Stock @authenticated @serial @mutation @smoke @add_order
+@regression @allure.label.epic:Stock @allure.label.feature:Stock @authenticated @serial @mutation @add_order
 Feature: Feature to test add Order
 
   Background: User has logged in and opened Stock Products
     Given User is on Stock Products Page
 
-  @smoke
   Scenario Outline: User Add a valid Order
     When User click Stock dropdown
     Then Stock dropdown show menu
