@@ -292,7 +292,9 @@ public final class BrowserStateManager {
         if (!directory.isAbsolute()) {
             directory = Path.of(System.getProperty("user.dir")).resolve(directory);
         }
-        String profile = config.getString("auth.state.profile", config.getString("username", "default"));
+        String profile = config.getString(
+                "auth.state.profile",
+                config.getString("auth.username", "default"));
         String fileName = config.environment() + "-" + browser.name().toLowerCase()
                 + "-" + shortHash(profile) + ".properties";
         return directory.normalize().resolve(fileName);

@@ -1,19 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
-<suite name="CADW native TestNG smoke suite" parallel="none" preserve-order="true">
+<suite name="CADW TestNG unit suite" parallel="classes" thread-count="2">
     <listeners>
         <listener class-name="com.cadw.automation.reporting.TestReportListener"/>
     </listeners>
-    <test name="Configuration and browser state unit tests">
+    <test name="Configuration and browser state tests">
         <classes>
             <class name="com.cadw.automation.config.EnvironmentConfigTest"/>
             <class name="com.cadw.automation.state.BrowserStateManagerTest"/>
-        </classes>
-    </test>
-    <test name="Native TestNG browser smoke tests">
-        <classes>
-            <class name="com.cadw.automation.tests.LoginTest"/>
-            <class name="com.cadw.automation.tests.StockReadOnlyTest"/>
         </classes>
     </test>
 </suite>

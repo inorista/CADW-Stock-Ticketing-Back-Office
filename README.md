@@ -1,74 +1,94 @@
-# Selenium Test Automation Framework
+# CADW Test Automation
 
-A Java 17, Selenium WebDriver, TestNG, and Cucumber framework for scalable local, Selenium Grid, and LambdaTest execution. It uses Page Objects, thread-local browser sessions, external JSON test data, SLF4J/Logback logging, and both Allure and Extent reports.
-
-## What is included
-
-- Chrome, Firefox, and Edge through Selenium Manager
-- Local, Selenium Grid, and LambdaTest execution targets
-- Thread-safe parallel TestNG and parallel Cucumber execution; cross-browser sessions run concurrently while Google searches remain sequential per browser to reduce rate limiting
-- Page Object Model with explicit waits and no shared mutable drivers
-- TestNG tests plus Cucumber/Gherkin examples
-- JSON test data kept outside test logic
-- Screenshots on failures in Allure and Extent reports
-- HTTP status validation for all unique links on the Google home page
-- GitHub Actions cross-browser execution and GitHub Pages report publishing
-
-The search suite contains three passing examples and one intentionally failing example, grouped as `intentional-failure`. This is deliberate so both successful and failed states appear in the reports.
+Java 17, Selenium WebDriver, TestNG, and Cucumber automation for the CADW back-office application. The framework supports environment-based configuration, reusable authenticated browser state, local/Grid/LambdaTest execution, and Allure, Extent, TestNG, and Cucumber reports.
 
 ## Prerequisites
 
 - JDK 17 or newer
 - Maven 3.9+
-- At least one supported browser installed for local execution
+- Chrome, Firefox, or Edge for local UI tests
 
-Selenium Manager resolves compatible local driver binaries automatically.
+Selenium Manager resolves the matching local driver automatically.
 
-## Quick start
+## Test suites
 
-Run the default Chrome suite in parallel, including the intentional failure:
+| Suite | File | Purpose |
+| --- | --- | --- |
+| Native TestNG smoke | `src/test/resources/suites/testng.xml` | Unit checks, login, and read-only stock tests |
+| TestNG unit | `src/test/resources/suites/testng-unit.xml` | Configuration and browser-state tests without opening a browser |
+| TestNG mutation | `src/test/resources/suites/testng-mutation.xml` | Product lifecycle, order creation, Shopify sync, and stock sync |
+| TestNG cross-browser | `src/test/resources/suites/testng-cross-browser.xml` | Native read-only tests on Chrome, Firefox, and Edge |
+| Cucumber | `src/test/resources/suites/cucumber-testng.xml` | BDD feature scenarios |
+| Cucumber cross-browser | `src/test/resources/suites/cross-browser.xml` | BDD scenarios on Chrome, Firefox, and Edge |
+
+Mutation suites change application data and therefore run only when explicitly selected.
+
+## Running tests
+
+The default command runs the native TestNG smoke suite:
 
 ```bash
 mvn clean test
 ```
 
-Run a green suite without the demonstration failure:
+A complete command covering the commonly used parameters is:
 
 ```bash
-mvn clean test -DexcludedGroups=intentional-failure
+mvn clean test \
+  -DsuiteXmlFile=src/test/resources/suites/testng.xml \
+  -Dtest.environment=dev \
+  -Dwebdriver.browser=chrome \
+  -Dwebdriver.headless=true \
+  -Dexecution=local
 ```
 
-Run all three browsers in parallel:
+Available environments are `dev`, `staging`, and `prod`. Available execution targets are `local`, `grid`, and `lambdatest`. A browser parameter inside a cross-browser XML suite takes precedence over `webdriver.browser`.
+
+Useful TestNG commands:
 
 ```bash
-mvn clean test -DsuiteXmlFile=src/test/resources/suites/cross-browser.xml
+# Fast tests without a browser
+mvn clean test -DsuiteXmlFile=src/test/resources/suites/testng-unit.xml
+
+# Native TestNG tests on three browsers
+mvn clean test \
+  -DsuiteXmlFile=src/test/resources/suites/testng-cross-browser.xml \
+  -Dtest.environment=staging \
+  -Dwebdriver.headless=true
+
+# Explicitly run data-changing TestNG tests
+mvn clean test \
+  -DsuiteXmlFile=src/test/resources/suites/testng-mutation.xml \
+  -Dtest.environment=dev
+
+# Filter native TestNG methods by group
+mvn clean test -Dgroups=smoke -DexcludedGroups=mutation
 ```
 
-Run Cucumber scenarios in parallel:
+Useful Cucumber commands:
 
 ```bash
-mvn clean test -DsuiteXmlFile=src/test/resources/suites/cucumber-testng.xml
+# All non-mutation BDD scenarios
+mvn clean test \
+  -DsuiteXmlFile=src/test/resources/suites/cucumber-testng.xml \
+  -Dcucumber.filter.tags='not @mutation'
+
+# Only BDD smoke scenarios, excluding data changes
+mvn clean test \
+  -DsuiteXmlFile=src/test/resources/suites/cucumber-testng.xml \
+  -Dcucumber.filter.tags='@smoke and not @mutation'
+
+# BDD cross-browser
+mvn clean test \
+  -DsuiteXmlFile=src/test/resources/suites/cross-browser.xml \
+  -Dcucumber.filter.tags='@smoke and not @mutation'
 ```
 
-Configuration is loaded from `dev.config`, `staging.config`, or `prod.config`. Select the environment with `-Dtest.environment=staging` or `TEST_ENVIRONMENT=staging`; it defaults to `dev`.
-
-Override any setting using a JVM property or an uppercase environment variable. For example, `base.url` maps to `BASE_URL`, and `lt.access.key` maps to `LT_ACCESS_KEY`.
-
-```bash
-mvn test -Dwebdriver.browser=firefox -Dwebdriver.headless=false
-```
+Every key from the selected `.config` file can be overridden by a JVM property or its uppercase environment-variable form. For example, `auth.username` maps to `AUTH_USERNAME`, and `webdriver.headless` maps to `WEBDRIVER_HEADLESS`.
 
 ## Reusing login state
 
-The framework automatically restores cookies, `localStorage`, and `sessionStorage` when a browser starts, then saves them before the browser closes. State is isolated by environment, browser, and account profile under `.browser-state/`, expires after 24 hours by default, and is excluded from Git because it can contain authentication tokens.
-
-After a successful login, save immediately when later scenarios may start in parallel:
-
-```java
-DriverFactory.saveBrowserState();
-```
-
-Use `DriverFactory.clearBrowserState()` to force a fresh login. Configure the behavior in the selected environment file:
+Authenticated tests restore and persist cookies, `localStorage`, and `sessionStorage`. State is isolated by environment, browser, and account under `.browser-state/`, expires after 24 hours by default, and is excluded from Git because it may contain authentication tokens.
 
 ```properties
 auth.state.enabled=true
@@ -76,93 +96,117 @@ auth.state.directory=.browser-state
 auth.state.max-age.hours=24
 ```
 
-## Reports and logs
+Delete the matching file under `.browser-state/`, or call `DriverFactory.clearBrowserState()`, to force a fresh login. Login tests always clear the active browser session first so both successful and invalid-login cases remain independent.
 
-After a run:
+## Reading reports locally
 
-- Extent: `target/extent-report/index.html`
-- Allure results: `target/allure-results`
-- Cucumber HTML: `target/cucumber-report/cucumber.html`
-- Logs: `target/logs/automation.log`
+After a test run, the framework produces:
 
-Generate the Allure HTML site with:
+| Report | Local entry point |
+| --- | --- |
+| Extent | `target/extent-report/index.html` |
+| TestNG | `target/surefire-reports/index.html` |
+| Cucumber | `target/cucumber-report/cucumber.html` (Cucumber suites only) |
+| Allure raw results | `target/allure-results/` |
+| Logs | `target/logs/automation.log` |
+
+Extent, TestNG, and Cucumber are static HTML and can be opened directly. On macOS:
+
+```bash
+open target/extent-report/index.html
+open target/surefire-reports/index.html
+open target/cucumber-report/cucumber.html
+```
+
+For Allure, generate or serve the site:
 
 ```bash
 mvn allure:report
+mvn allure:serve
 ```
 
-The generated Allure entry point is `target/site/allure-maven-plugin/index.html`. To start a temporary local report server, use `mvn allure:serve`.
-
-## Selenium Grid
-
-Start a compatible Grid, then override the execution target and URL:
+The generated Allure entry point is `target/site/allure-maven-plugin/index.html`. If a browser blocks assets opened with `file://`, serve all reports through HTTP:
 
 ```bash
-mvn test \
-  -DsuiteXmlFile=src/test/resources/suites/cross-browser.xml \
+python3 -m http.server 8080 --directory target
+```
+
+Then open `http://localhost:8080/extent-report/`, `http://localhost:8080/surefire-reports/`, or `http://localhost:8080/cucumber-report/cucumber.html`.
+
+## Reports in GitHub Actions
+
+The **Test automation** workflow supports manual selection of:
+
+- TestNG/Cucumber suite
+- `dev`, `staging`, or `prod`
+- Browser and headless mode
+- Local or LambdaTest execution
+- Cucumber tag expression
+
+It also runs these schedules in `Asia/Ho_Chi_Minh`:
+
+| Local time | Scheduled run | Selection |
+| --- | --- | --- |
+| 00:00 every day | Nightly E2E | Cucumber suite with `@e2e` |
+| 08:00 every day | Morning Smoke | Native TestNG smoke suite |
+
+Scheduled runs use Chrome headless against `staging`. To select another scheduled environment without editing the workflow, create the repository variable `SCHEDULED_TEST_ENVIRONMENT` with `dev`, `staging`, or `prod` under **Settings → Secrets and variables → Actions → Variables**.
+
+For non-PR runs, the workflow deploys one report portal to GitHub Pages and writes direct Allure, Extent, TestNG, and Cucumber links into the workflow **Summary**. Configure this once under **Settings → Pages → Source → GitHub Actions**.
+
+Every run, including pull requests and failed runs, uploads `automation-reports-<run type>-<run number>` under **Actions → workflow run → Artifacts**. Nightly and morning artifacts therefore remain separate even though GitHub Pages shows the latest deployed run. Download and unzip an artifact, then serve the extracted directory when needed:
+
+```bash
+python3 -m http.server 8080
+```
+
+Open `http://localhost:8080/public/`. Pull requests intentionally do not deploy GitHub Pages, so the artifact is the report source for PR runs.
+
+Store these repository secrets under **Settings → Secrets and variables → Actions** when credentials should not come from the checked-in environment file:
+
+- `AUTH_USERNAME`
+- `AUTH_PASSWORD`
+- `LT_USERNAME` and `LT_ACCESS_KEY` for LambdaTest
+
+The test step is allowed to finish before the workflow fails so reports are still assembled and uploaded. The final job status still reflects test failures.
+
+## Selenium Grid and LambdaTest
+
+```bash
+# Selenium Grid
+mvn clean test \
+  -DsuiteXmlFile=src/test/resources/suites/testng-cross-browser.xml \
   -Dexecution=grid \
   -Dremote.url=http://localhost:4444/wd/hub \
   -Dplatform=linux
-```
 
-Parallelism is controlled in the TestNG suite XML files. Every invocation receives an isolated driver from `DriverSession`.
-
-## LambdaTest
-
-Do not commit credentials. Export them, then select the LambdaTest execution target:
-
-```bash
+# LambdaTest
 export LT_USERNAME='your-user-name'
 export LT_ACCESS_KEY='your-access-key'
-
-mvn test \
-  -DsuiteXmlFile=src/test/resources/suites/cross-browser.xml \
+mvn clean test \
+  -DsuiteXmlFile=src/test/resources/suites/testng-cross-browser.xml \
   -Dexecution=lambdatest \
   -Dlt.platform='Windows 11' \
   -Dlt.browser.version=latest \
   -Dlt.build='release-42'
 ```
 
-The framework sends W3C `LT:Options`, names each remote session, and updates its pass/fail status. Optional video, network, console, and tunnel settings live in the selected environment config file.
-
-## GitHub Actions and live report links
-
-The workflow at `.github/workflows/test-automation.yml` runs Chrome, Firefox, and Edge on `windows-latest`, uploads raw report artifacts, and publishes a small report portal to GitHub Pages. It writes direct Allure and Extent links to the workflow summary even when a demonstration test fails.
-
-One-time repository setup:
-
-1. Open **Settings → Pages** and select **GitHub Actions** as the source.
-2. For LambdaTest workflow dispatches, add `LT_USERNAME` and `LT_ACCESS_KEY` under **Settings → Secrets and variables → Actions**.
-3. Push to `main`/`master`, or run **Test automation** manually. Choose `lambdatest` to use the cloud grid.
-
-The test command is allowed to finish with failures so reports can still be generated and deployed. The workflow restores the failing status after publishing, so genuine failures remain visible.
-
 ## Project layout
 
 ```text
-src/main/java/com/example/automation/
-├── config/       # Environment-based property loading
-├── driver/       # Thread-local local/Grid/LambdaTest driver creation
-├── pages/        # Reusable Page Objects
+src/main/java/com/cadw/automation/
+├── config/       # EnvironmentConfig and environment files
+├── driver/       # Thread-local local/Grid/LambdaTest drivers
+├── pages/        # Page Objects
 ├── reporting/    # Extent report lifecycle
-└── utils/        # Link checking and screenshots
+└── state/        # Cookies and Web Storage persistence
 
 src/test/
-├── java/.../base       # TestNG BaseTest lifecycle
-├── java/.../tests      # Google sample tests
-├── java/.../bdd        # Cucumber runner, hooks, and steps
+├── java/com/cadw/automation/base       # TestNG browser lifecycle
+├── java/com/cadw/automation/tests      # Native TestNG tests
+├── java/com/cadw/automation/bdd        # Cucumber runners, hooks, and steps
 └── resources/
-    ├── config/         # Runtime configuration
-    ├── data/           # JSON test data
-    ├── features/       # Gherkin specifications
-    └── suites/         # TestNG execution suites
+    ├── data/                           # External test data
+    ├── features/                       # Gherkin specifications
+    └── suites/                         # TestNG suite XML files
 ```
-
-## Adding tests
-
-1. Add user interactions and state queries to a Page Object.
-2. Put scenario values in `src/test/resources/data`, not in test logic.
-3. Extend `BaseTest` for TestNG tests, or add Gherkin steps under the Cucumber glue package.
-4. Keep assertions in tests/steps and browser mechanics in pages or utilities.
-
-Google can vary markup, consent prompts, and anti-automation behavior by region. The sample uses English (`hl=en`), resilient search-box selectors, and an optional consent handler. If Google returns its unusual-traffic CAPTCHA, passing search examples are marked skipped with a clear reason; the deliberate negative example still fails. Production suites should use an application and environment you control.

@@ -4,8 +4,47 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  schedule:
+    - cron: '0 0 * * *'
+      timezone: Asia/Ho_Chi_Minh
+    - cron: '0 8 * * *'
+      timezone: Asia/Ho_Chi_Minh
   workflow_dispatch:
     inputs:
+      suite:
+        description: Test suite
+        required: true
+        default: testng
+        type: choice
+        options:
+          - testng
+          - testng-unit
+          - testng-mutation
+          - testng-cross-browser
+          - cucumber
+          - cucumber-cross-browser
+      environment:
+        description: Application environment
+        required: true
+        default: dev
+        type: choice
+        options: [dev, staging, prod]
+      browser:
+        description: Browser for single-browser suites
+        required: true
+        default: chrome
+        type: choice
+        options: [chrome, firefox, edge]
+      headless:
+        description: Run browser without a visible window
+        required: true
+        default: true
+        type: boolean
+      cucumber_tags:
+        description: Cucumber tag expression (ignored by native TestNG suites)
+        required: false
+        default: not @mutation
+        type: string
       execution:
         description: Execution target
         required: true
@@ -27,7 +66,10 @@ jobs:
     runs-on: windows-latest
     outputs:
       test_outcome: ${{ steps.tests.outcome }}
+      run_kind: ${{ steps.parameters.outputs.run_kind }}
     env:
+      AUTH_USERNAME: ${{ secrets.AUTH_USERNAME }}
+      AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
       LT_USERNAME: ${{ secrets.LT_USERNAME }}
       LT_ACCESS_KEY: ${{ secrets.LT_ACCESS_KEY }}
       LT_BUILD: GitHub-${{ github.run_number }}-${{ github.sha }}
@@ -35,20 +77,106 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v6
 
-      - name: Set up Java 17
+      - name: Set up Java 21
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
           cache: maven
 
-      - name: Run Chrome, Firefox, and Edge tests
+      - name: Resolve execution parameters
+        id: parameters
+        shell: pwsh
+        env:
+          INPUT_SUITE: ${{ inputs.suite }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_BROWSER: ${{ inputs.browser }}
+          INPUT_HEADLESS: ${{ inputs.headless }}
+          INPUT_EXECUTION: ${{ inputs.execution }}
+          INPUT_CUCUMBER_TAGS: ${{ inputs.cucumber_tags }}
+          SCHEDULE_CRON: ${{ github.event.schedule }}
+          SCHEDULED_TEST_ENVIRONMENT: ${{ vars.SCHEDULED_TEST_ENVIRONMENT }}
+        run: |
+          $suite = $env:INPUT_SUITE
+          if ([string]::IsNullOrWhiteSpace($suite)) { $suite = 'testng' }
+          $suiteFiles = @{
+            'testng' = 'src/test/resources/suites/testng.xml'
+            'testng-unit' = 'src/test/resources/suites/testng-unit.xml'
+            'testng-mutation' = 'src/test/resources/suites/testng-mutation.xml'
+            'testng-cross-browser' = 'src/test/resources/suites/testng-cross-browser.xml'
+            'cucumber' = 'src/test/resources/suites/cucumber-testng.xml'
+            'cucumber-cross-browser' = 'src/test/resources/suites/cross-browser.xml'
+          }
+          if (-not $suiteFiles.ContainsKey($suite)) { throw "Unsupported suite: $suite" }
+
+          $environment = $env:INPUT_ENVIRONMENT
+          if ([string]::IsNullOrWhiteSpace($environment)) { $environment = 'dev' }
+          $browser = $env:INPUT_BROWSER
+          if ([string]::IsNullOrWhiteSpace($browser)) { $browser = 'chrome' }
+          $headless = $env:INPUT_HEADLESS
+          if ([string]::IsNullOrWhiteSpace($headless)) { $headless = 'true' }
+          $execution = $env:INPUT_EXECUTION
+          if ([string]::IsNullOrWhiteSpace($execution)) { $execution = 'local' }
+          $tags = $env:INPUT_CUCUMBER_TAGS
+          if ([string]::IsNullOrWhiteSpace($tags)) { $tags = 'not @mutation' }
+
+          $runKind = 'Default or manually selected test run'
+          $runSlug = 'selected'
+          if ($env:GITHUB_EVENT_NAME -eq 'schedule') {
+            $environment = $env:SCHEDULED_TEST_ENVIRONMENT
+            if ([string]::IsNullOrWhiteSpace($environment)) { $environment = 'staging' }
+            $browser = 'chrome'
+            $headless = 'true'
+            $execution = 'local'
+
+            switch ($env:SCHEDULE_CRON) {
+              '0 0 * * *' {
+                $suite = 'cucumber'
+                $tags = '@e2e'
+                $runKind = 'Nightly E2E'
+                $runSlug = 'nightly-e2e'
+              }
+              '0 8 * * *' {
+                $suite = 'testng'
+                $tags = 'not @mutation'
+                $runKind = 'Morning Smoke'
+                $runSlug = 'morning-smoke'
+              }
+              default { throw "Unsupported scheduled trigger: $env:SCHEDULE_CRON" }
+            }
+          }
+
+          "TEST_SUITE_FILE=$($suiteFiles[$suite])" >> $env:GITHUB_ENV
+          "TEST_ENVIRONMENT_INPUT=$environment" >> $env:GITHUB_ENV
+          "TEST_BROWSER=$browser" >> $env:GITHUB_ENV
+          "TEST_HEADLESS=$headless" >> $env:GITHUB_ENV
+          "TEST_EXECUTION=$execution" >> $env:GITHUB_ENV
+          "TEST_CUCUMBER_TAGS=$tags" >> $env:GITHUB_ENV
+          "TEST_RUN_KIND=$runKind" >> $env:GITHUB_ENV
+          "run_kind=$runKind" >> $env:GITHUB_OUTPUT
+          "run_slug=$runSlug" >> $env:GITHUB_OUTPUT
+
+          "## Execution plan" >> $env:GITHUB_STEP_SUMMARY
+          "- Run: **$runKind**" >> $env:GITHUB_STEP_SUMMARY
+          "- Suite: ``$suite``" >> $env:GITHUB_STEP_SUMMARY
+          "- Environment: ``$environment``" >> $env:GITHUB_STEP_SUMMARY
+          "- Browser: ``$browser``; headless: ``$headless``" >> $env:GITHUB_STEP_SUMMARY
+          if ($suite -like 'cucumber*') {
+            "- Cucumber tags: ``$tags``" >> $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Run selected tests
         id: tests
         continue-on-error: true
-        run: >-
-          mvn -B -ntp clean test
-          "-DsuiteXmlFile=src/test/resources/suites/cross-browser.xml"
-          "-Dexecution=${{ inputs.execution || 'local' }}"
+        shell: pwsh
+        run: |
+          mvn -B -ntp clean test `
+            "-DsuiteXmlFile=$env:TEST_SUITE_FILE" `
+            "-Dtest.environment=$env:TEST_ENVIRONMENT_INPUT" `
+            "-Dwebdriver.browser=$env:TEST_BROWSER" `
+            "-Dwebdriver.headless=$env:TEST_HEADLESS" `
+            "-Dexecution=$env:TEST_EXECUTION" `
+            "-Dcucumber.filter.tags=$env:TEST_CUCUMBER_TAGS"
 
       - name: Generate Allure HTML
         if: always()
@@ -59,7 +187,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force public/allure, public/extent | Out-Null
+          New-Item -ItemType Directory -Force public/allure, public/extent, public/testng, public/cucumber | Out-Null
           if (Test-Path target/site/allure-maven-plugin) {
             Copy-Item target/site/allure-maven-plugin/* public/allure -Recurse -Force
           } else {
@@ -70,19 +198,33 @@ jobs:
           } else {
             Set-Content public/extent/index.html '<h1>Extent report was not generated</h1>'
           }
+          if (Test-Path target/surefire-reports/index.html) {
+            Copy-Item target/surefire-reports/* public/testng -Recurse -Force
+          } else {
+            Set-Content public/testng/index.html '<h1>TestNG report was not generated</h1>'
+          }
+          if (Test-Path target/cucumber-report/cucumber.html) {
+            Copy-Item target/cucumber-report/cucumber.html public/cucumber/index.html -Force
+            if (Test-Path target/cucumber-report/cucumber.json) {
+              Copy-Item target/cucumber-report/cucumber.json public/cucumber/cucumber.json -Force
+            }
+          } else {
+            Set-Content public/cucumber/index.html '<h1>Cucumber report was not generated for this TestNG run</h1>'
+          }
           Copy-Item src/test/resources/report-index.html public/index.html
 
       - name: Upload raw test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: automation-reports-${{ github.run_number }}
+          name: automation-reports-${{ steps.parameters.outputs.run_slug }}-${{ github.run_number }}
           path: |
             target/allure-results
             target/extent-report
             target/cucumber-report
             target/surefire-reports
             target/logs
+            public
           if-no-files-found: warn
           retention-days: 14
 
@@ -117,10 +259,14 @@ jobs:
         env:
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
           TEST_OUTCOME: ${{ needs.build-and-test.outputs.test_outcome }}
+          RUN_KIND: ${{ needs.build-and-test.outputs.run_kind }}
         run: |
           echo "## Test reports" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Run: **${RUN_KIND}**" >> "$GITHUB_STEP_SUMMARY"
           echo "- [Allure report](${PAGE_URL}allure/)" >> "$GITHUB_STEP_SUMMARY"
           echo "- [Extent report](${PAGE_URL}extent/)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [TestNG report](${PAGE_URL}testng/)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [Cucumber report](${PAGE_URL}cucumber/)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Test step outcome: **${TEST_OUTCOME}**" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Preserve failing test status
