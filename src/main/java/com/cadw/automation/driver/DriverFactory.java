@@ -46,9 +46,26 @@ public final class DriverFactory {
         driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(config.pageLoadTimeoutSeconds()));
         driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(config.scriptTimeoutSeconds()));
         DriverSession.set(driver, target, browser);
-        BrowserStateManager.restore(driver, config, browser);
-        LOG.info("Started {} session on {} for {}", browser, target, testName);
-        return driver;
+        try {
+            boolean stateRestored = BrowserStateManager.restore(driver, config, browser);
+            if (!stateRestored) {
+                driver.get(config.baseUrl());
+            }
+            LOG.info(
+                    "Started {} session on {} for {} (browser state restored: {})",
+                    browser,
+                    target,
+                    testName,
+                    stateRestored);
+            return driver;
+        } catch (RuntimeException exception) {
+            try {
+                driver.quit();
+            } finally {
+                DriverSession.clear();
+            }
+            throw exception;
+        }
     }
 
     public static void stop() {
