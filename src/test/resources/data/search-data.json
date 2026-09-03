@@ -1,0 +1,18 @@
+{
+  "relevantResults": {
+    "query": "Selenium WebDriver",
+    "expectedText": "Selenium"
+  },
+  "titleContainsQuery": {
+    "query": "OpenAI",
+    "expectedText": "OpenAI"
+  },
+  "queryRetained": {
+    "query": "TestNG framework",
+    "expectedText": "TestNG framework"
+  },
+  "intentionalFailure": {
+    "query": "Cucumber JVM",
+    "expectedText": "RESULT_THAT_MUST_NEVER_EXIST_9F3A21"
+  }
+}
