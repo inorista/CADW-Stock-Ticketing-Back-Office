@@ -212,6 +212,18 @@ jobs:
             "-Dexecution=$env:TEST_EXECUTION" `
             "-Dcucumber.filter.tags=$env:TEST_CUCUMBER_TAGS"
 
+      - name: Display automation execution log
+        if: always()
+        shell: pwsh
+        run: |
+          $logFile = Join-Path $env:GITHUB_WORKSPACE 'target/logs/automation.log'
+          if (Test-Path $logFile) {
+            Write-Host 'Automation execution log (target/logs/automation.log)'
+            Get-Content $logFile
+          } else {
+            Write-Warning 'Automation execution log was not created.'
+          }
+
       - name: Generate Allure HTML
         if: always()
         continue-on-error: true

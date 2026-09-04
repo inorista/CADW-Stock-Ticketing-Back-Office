@@ -26,13 +26,13 @@ public final class TestReportListener implements ITestListener, IExecutionListen
         ExtentTest test = ExtentReportManager.report().createTest(displayName);
         test.assignCategory(result.getMethod().getGroups());
         TEST.set(test);
-        LOG.info("START {}", displayName);
+        LOG.info("[TESTNG][TEST_START] {}", displayName);
     }
 
     @Override
     public void onTestSuccess(ITestResult result) {
         current().pass("Passed");
-        LOG.info("PASS {}", result.getName());
+        LOG.info("[TESTNG][TEST_PASS] {}", result.getName());
         TEST.remove();
     }
 
@@ -45,7 +45,7 @@ public final class TestReportListener implements ITestListener, IExecutionListen
             String base64 = Base64.getEncoder().encodeToString(bytes);
             test.fail("Browser screenshot", MediaEntityBuilder.createScreenCaptureFromBase64String(base64).build());
         });
-        LOG.error("FAIL {}", result.getName(), result.getThrowable());
+        LOG.error("[TESTNG][TEST_FAIL] {}", result.getName(), result.getThrowable());
         TEST.remove();
     }
 
@@ -56,7 +56,7 @@ public final class TestReportListener implements ITestListener, IExecutionListen
         } else {
             current().skip(result.getThrowable());
         }
-        LOG.warn("SKIP {}", result.getName());
+        LOG.warn("[TESTNG][TEST_SKIP] {}", result.getName());
         TEST.remove();
     }
 
